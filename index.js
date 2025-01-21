@@ -1,6 +1,7 @@
 import express from "express";
 import { WebSocketServer } from "ws";
 import url from "url";
+import cors from "cors";
 
 const app = express();
 const PORT = 4200;
@@ -8,6 +9,8 @@ const PORT = 4200;
 const server = app.listen(PORT, () => {
     console.log(`Your server is live at port ${PORT}`);
 });
+
+app.use(cors());
 
 const wss = new WebSocketServer({ server });
 // const clients = new Map();
@@ -28,6 +31,8 @@ wss.on("connection", (ws, req) => {
     ws.on("message", (data) => {
         const parsed = JSON.parse(data.toString())
         parsed.username = username;
+
+        messages.push(parsed);
 
         wss.clients.forEach((client) => {
             if (client.readyState === ws.OPEN) {
@@ -79,3 +84,10 @@ wss.on("connection", (ws, req) => {
     });
 });
 
+app.get("/api/users", (_, res) => {
+    res.status(200).json({ status: 200, users })
+})
+
+app.get("/api/messages", (_, res) => {
+    res.status(200).json({ status: 200, messages })
+})
