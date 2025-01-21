@@ -61,7 +61,13 @@ wss.on("connection", (ws, req) => {
         const parsed = JSON.parse(data.toString());
         parsed.username = username;
         parsed.avatar = avatar;
+
+        if (messages.length > MAX_SIZE)
+            messages.shift()
+
         messages.push(parsed);
+
+
 
         wss.clients.forEach(client => {
             if (client.readyState === ws.OPEN) {
