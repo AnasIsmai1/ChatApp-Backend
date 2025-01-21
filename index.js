@@ -7,17 +7,15 @@ const app = express();
 const PORT = 4200;
 
 const server = app.listen(PORT, () => {
-    console.log(`Your server is live at port ${PORT}`);
+    console.log(`Server is live at port ${PORT}`);
 });
 
 app.use(cors());
 
 const wss = new WebSocketServer({ server });
-// const clients = new Map();
 const users = [];
-const messages = []
 
-console.log(`WebSocket Server is running on ws://localhost:${PORT}`);
+console.log(`WebSocket Server running on ws://localhost:${PORT}`);
 
 wss.on("connection", (ws, req) => {
     console.log("A new client connected");
@@ -26,11 +24,17 @@ wss.on("connection", (ws, req) => {
     const clientID = queryObject.userID;
     const username = queryObject.username;
 
+    if (!clientID || !username) {
+        console.log("Invalid connection: Missing userID or username");
+        ws.close();
+        return;
+    }
 
+    if (!users.find((user) => user.clientID === clientID)) {
+        const avatar = `https://api.dicebear.com/6.x/adventurer/svg?seed=${username}`;
+        users.push({ clientID, username, avatar, socket: ws });
 
-    ws.on("message", (data) => {
-        const parsed = JSON.parse(data.toString())
-        parsed.username = username;
+        broadcastUsers();
 
         messages.push(parsed);
 
@@ -39,46 +43,49 @@ wss.on("connection", (ws, req) => {
                 client.send(JSON.stringify(parsed));
             }
         });
-    });
 
-    if (!users.find(user => user.clientID === clientID)) {
-        console.log(`Assigned ID ${clientID} to the new client`);
-
-        users.push({ clientID, username, socket: ws });
-        users.forEach(user => console.log(user.clientID))
+        ws.send(
+            JSON.stringify({
+                text: `Welcome to the chat, ${username}!`,
+                type: "info",
+                isSent: "false",
+                clientID,
+            })
+        );
 
         wss.clients.forEach((client) => {
             if (client.readyState === ws.OPEN && client !== ws) {
-                client.send(JSON.stringify({
-                    text: `${username} joined the chat`,
-                    type: "info",
-                    isSent: "false",
-                    clientID
-                }));
+                client.send(
+                    JSON.stringify({
+                        text: `${username} joined the chat`,
+                        type: "info",
+                        isSent: "false",
+                        clientID,
+                    })
+                );
             }
         });
-
-        ws.send(JSON.stringify({ text: `Welcome to the chat, ${username}!`, type: "info", isSent: "false", clientID }));
     } else {
         console.log(`Client ID ${clientID} is already connected`);
     }
 
     ws.on("close", () => {
         console.log(`Client ${clientID} disconnected`);
-
-        const index = users.findIndex(user => user.clientID === clientID);
+        const index = users.findIndex((user) => user.clientID === clientID);
         if (index !== -1) users.splice(index, 1);
 
-        users.forEach(user => console.log(user.clientID))
+        broadcastUsers();
 
         wss.clients.forEach((client) => {
             if (client.readyState === ws.OPEN) {
-                client.send(JSON.stringify({
-                    text: `${username} left the chat`,
-                    type: "info",
-                    isSent: "false",
-                    clientID
-                }));
+                client.send(
+                    JSON.stringify({
+                        text: `${username} left the chat`,
+                        type: "info",
+                        isSent: "false",
+                        clientID,
+                    })
+                );
             }
         });
     });
@@ -91,3 +98,22 @@ app.get("/api/users", (_, res) => {
 app.get("/api/messages", (_, res) => {
     res.status(200).json({ status: 200, messages })
 })
+
+function broadcastUsers() {
+    const userList = users.map((user) => ({
+        clientID: user.clientID,
+        username: user.username,
+        avatar: user.avatar,
+    }));
+
+    wss.clients.forEach((client) => {
+        if (client.readyState === ws.OPEN) {
+            client.send(
+                JSON.stringify({
+                    type: "userList",
+                    users: userList,
+                })
+            );
+        }
+    });
+}
